@@ -11,7 +11,7 @@
  * 
  * @package Omeka\Plugins\MetadataMigrator
  */
-class MetadataMigrator extends Omeka_Plugin_AbstractPlugin
+class MetadataMigratorPlugin extends Omeka_Plugin_AbstractPlugin
 {
 
     protected $_hooks = array(
@@ -43,9 +43,9 @@ class MetadataMigrator extends Omeka_Plugin_AbstractPlugin
             . 'is not installed. pdftotext must be installed to install this plugin.'));
         }
         // Don't install if a PDF element set does not exist.
-        if (!$this->_db->getTable('ElementSet')->findByName(self::ELEMENT_SET_NAME)) {
-            throw new Omeka_Plugin_Installer_Exception(__('An element set by the name "%s" does not ' 
-            . 'exist. You must install the PdfToText plugin to use this plugin.', self::ELEMENT_SET_NAME));
+        if (!$this->_db->getTable('ElementSet')->findByName('PDF Text')) {
+            throw new Omeka_Plugin_Installer_Exception(__('An element set by the name "PDF text" does not ' 
+            . 'exist. You must install the PdfToText plugin to use this plugin.'));
         }
         
     }
@@ -56,13 +56,16 @@ class MetadataMigrator extends Omeka_Plugin_AbstractPlugin
     public function hookUninstall()
     {
         // Delete all file-level metadata this plugin creates
-        $FileTable = $this->_db->getTable('Files');
+        $dataBase = get_db();
+        $fileTable = $dataBase->getTable('File');
         
+        $mimeTypes = $this->getPdfMimeTypes();
+
         $select = $this->_db->select()
         ->from($this->_db->File)
-        ->where('mime_type IN (?)', $pdfTextPlugin->getPdfMimeTypes());
+        ->where('mime_type IN (?)', $mimeTypes);
         $pageNumber = 1;
-        while ($files = $fileTable->fetchObjects($selectFiles->limitPage($pageNumber, 50))) {
+        while ($files = $fileTable->fetchObjects($select->limitPage($pageNumber, 50))) {
             foreach ($files as $file) {
                 $textTitle = $file->getElement(
                     "Dublin Core",
@@ -89,7 +92,7 @@ class MetadataMigrator extends Omeka_Plugin_AbstractPlugin
     public function hookConfigForm()
     {
         echo get_view()->partial(
-            'plugins/metadata-migrator-config-form.php'
+            'plugins/metadata-migrate-config-form.php'
             
         );
     }
@@ -99,10 +102,10 @@ class MetadataMigrator extends Omeka_Plugin_AbstractPlugin
      */
     public function hookConfig()
     {
-        // Run the text extraction process if directed to do so.
+        // Run the migration process if directed to do so.
         if ($_POST['metadata_process']) {
             Zend_Registry::get('bootstrap')->getResource('jobs')
-                ->sendLongRunning('MetadataMove');
+                ->sendLongRunning('MetadataMigrateProcess');
         }
     }
 
@@ -111,53 +114,58 @@ class MetadataMigrator extends Omeka_Plugin_AbstractPlugin
      * 
      * This has a secondary effect of including the text in the search index.
      */
+
+    
     public function hookBeforeSaveFile($args)
     {
-        
-        $itemTable = $this->_db->getTable('Item');
         // Move Metadata only on file insert.
         if (!$args['insert']) {
             return;
         }
-        $file = $args['record'];
 
-         
         // Ignore non-PDF files.
         if (!in_array($file->mime_type, $this->_pdfMimeTypes)) {
             return;
         }
 
+        //get the file object
+        $file = $args['record'];
+
+        //now get the item record
+        
         $Item = $file->getItem();
 
-        $itemDescription = $Item->getElement(
+        $dcDescription = $Item->getElement(
             "Dublin Core",
             "Description"
         );
 
-        $itemTitle = $Item->getElement(
+        $dcTitle = $Item->getElement(
             "Dublin Core",
             "Title"
-        );
-        
-        $fileDescription = $file->getElement(
-            "Dublin Core",
-            "Description"
         );
 
-        $fileTitle = $file->getElement(
-            "Dublin Core",
-            "Title"
-        );
+        $ElementTexts = $Item->getAllElementTexts();
+
+        foreach ($ElementTexts as $ElementText) {
+            if ($ElementText->element_id == $dcTitle->id) {
+                $itemTitle = $ElementText->text;
+            } else if ($ElementText->element_id == $dcDescription->id) {
+                $itemDescription = $ElementText->text;
+            }
+
+
+        }
 
         $file->addTextForElement(
-            $fileTitle,
-            "PDF Document from:" . $itemTitle->text
+            $dcTitle,
+            "PDF Document from: $itemTitle"
             
         );
 
         $file->addTextForElement(
-            $fileDescription,
-            $itemDescription->text
+            $dcDescription,
+            $itemDescription
             
         );
         release_object($Item);
