@@ -61,22 +61,21 @@ class MetadataMigratorPlugin extends Omeka_Plugin_AbstractPlugin
         
         $mimeTypes = $this->getPdfMimeTypes();
 
-        $select = $this->_db->select()
-        ->from($this->_db->File)
+        $dcElementSet = $dataBase->getTable('ElementSet')->findByName('Dublin Core');
+
+        $dcElements = $dcElementSet->getElements();
+
+        $select = $dataBase->select()
+        ->from($dataBase->File)
         ->where('mime_type IN (?)', $mimeTypes);
         $pageNumber = 1;
         while ($files = $fileTable->fetchObjects($select->limitPage($pageNumber, 50))) {
             foreach ($files as $file) {
-                $textTitle = $file->getElement(
-                    "Dublin Core",
-                    "Title"
-                );
-                $file->deleteElementTextsByElementId(array($textTitle->id));
-                $textDescription = $file->getElement(
-                    "Dublin Core",
-                    "Description"
-                );
-                $file->deleteElementTextsByElementId(array($textDescription->id));
+                foreach ($dcElements as $dcElement) {
+
+                    $file->deleteElementTextsByElementId(array($dcElement->id));
+                
+                }
             }
             $pageNumber++;
         }
@@ -118,6 +117,7 @@ class MetadataMigratorPlugin extends Omeka_Plugin_AbstractPlugin
     
     public function hookBeforeSaveFile($args)
     {
+        $file = $args['record'];
         // Move Metadata only on file insert.
         if (!$args['insert']) {
             return;
@@ -128,46 +128,34 @@ class MetadataMigratorPlugin extends Omeka_Plugin_AbstractPlugin
             return;
         }
 
-        //get the file object
-        $file = $args['record'];
+        //get the item table
+        
+        $dataBase = get_db();
+        $itemTable = $dataBase->_db->getTable('Item');
 
         //now get the item record
+
+        $select = $dataBase->select()
+        ->from($dataBase->Item)
+        ->where('id = ?', $file->item_id);
         
-        $Item = $file->getItem();
+        $Item = $itemTable->fetchObject($select);
 
-        $dcDescription = $Item->getElement(
-            "Dublin Core",
-            "Description"
-        );
+        $dcElementSet = $dataBase->getTable('ElementSet')->findByName('Dublin Core');
 
-        $dcTitle = $Item->getElement(
-            "Dublin Core",
-            "Title"
-        );
+        $dcElements = $dcElementSet->getElements();
 
-        $ElementTexts = $Item->getAllElementTexts();
+        $metadataOptions = array('no_escape' => true, 'no_filter' => true);
 
-        foreach ($ElementTexts as $ElementText) {
-            if ($ElementText->element_id == $dcTitle->id) {
-                $itemTitle = $ElementText->text;
-            } else if ($ElementText->element_id == $dcDescription->id) {
-                $itemDescription = $ElementText->text;
-            }
+        foreach ($dcElements as $dcElement) {
 
+            $itemMetadataText = metadata($Item, array('Dublin Core', $dcElement->name), $metadataOptions);
+            
+ 
 
         }
 
-        $file->addTextForElement(
-            $dcTitle,
-            "PDF Document from: $itemTitle"
-            
-        );
-
-        $file->addTextForElement(
-            $dcDescription,
-            $itemDescription
-            
-        );
+    
         release_object($Item);
         
         
@@ -184,3 +172,4 @@ class MetadataMigratorPlugin extends Omeka_Plugin_AbstractPlugin
         return $this->_pdfMimeTypes;
     }
 }
+?>

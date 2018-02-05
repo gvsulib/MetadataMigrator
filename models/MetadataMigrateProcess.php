@@ -17,8 +17,7 @@ class MetadataMigrateProcess extends Omeka_Job_AbstractJob
     public function perform()
 
     {
-        $logfile = fopen("/home/bitnami/htdocs/plugins/MetadataMigrator/models/logfile.log", "w");
-              
+               
         $MetaDataMigratorPlugin = new MetaDataMigratorPlugin;
         $fileTable = $this->_db->getTable('File');
         $itemTable = $this->_db->getTable('Item');
@@ -32,71 +31,93 @@ class MetadataMigrateProcess extends Omeka_Job_AbstractJob
         ->from($this->_db->File)
         ->where('mime_type IN (?)', $MetaDataMigratorPlugin->getPdfMimeTypes());
 
-        //now cycle through them, wiping text capture wherever it is
+        
+
+        //get the DC metadata set
+        $dcElementSet = $this->_db->getTable('ElementSet')->findByName('Dublin Core');
+        
+        $dcElements = $dcElementSet->getElements();
+
+        $metadataOptions = array('no_escape' => true, 'no_filter' => true);
+        
+
+        //now cycle through them, wiping dc metadata wherever it is
         $pageNumber = 1;
         while ($files = $fileTable->fetchObjects($selectFiles->limitPage($pageNumber, 50))) {
             
             foreach ($files as $file) {
+               
+                
+                //first delete all existing DC metadata
+                foreach ($dcElements as $dcElement) {
+                    
+                    $file->deleteElementTextsByElementId(array($dcElement->id));
+                   
+                }
+                $file->save();
+                release_object($file);
+               
+            }
+            $pageNumber++;
+        }
+        //now cycle through again, this time attaching metadata
+        
+        $pageNumber = 1;
+        while ($files = $fileTable->fetchObjects($selectFiles->limitPage($pageNumber, 50))) {
+            $pageNumber++;
             
-
-                //get title and description metadata
-                $dcTitle = $file->getElement(
-                    "Dublin Core",
-                    "Title"
-                );
-                $dcDescription = $file->getElement(
-                    "Dublin Core",
-                    "Description"
-                );
-                //wipe it
-                $file->deleteElementTextsByElementId(array($dcTitle->id));
-                $file->deleteElementTextsByElementId(array($dcDescription->id));
-
-                //now get the parent file and pull it's metadata
+            
+            foreach ($files as $file) {
+            
+                //get the parent item 
                 $selectItem = $this->_db->select()
                     ->from($this->_db->Item)
                     ->where('id = ?', $file->item_id);
 
                 $Item = $itemTable->fetchObject($selectItem);
+               
+               
+                //loop through Item DC metadata, grab the text of the elment from the item,
+                //attach it to the file
 
-                $ElementTexts = $Item->getAllElementTexts();
+                
+                foreach ($dcElements as $dcElement) {
+                    $itemMetadataText = metadata($Item, array('Dublin Core', $dcElement->name), $metadataOptions);
+                    
 
-                foreach ($ElementTexts as $ElementText) {
-                    if ($ElementText->element_id == $dcTitle->id) {
-                        $itemTitle = $ElementText->text;
-                    } else if ($ElementText->element_id == $dcDescription->id) {
-                        $itemDescription = $ElementText->text;
+                    if ($dcElement->name == "Title") {
+
+            
+                        $file->addTextForElement(
+                            $dcElement,
+                            "PDF File from: $itemMetadataText"
+                        
+                        );
+                    } else {
+                        $file->addTextForElement(
+                            $dcElement,
+                            $itemMetadataText
+                        
+                        );
                     }
 
-
                 }
-        
-                
-                //add it to the file
-
-                
-                $file->addTextForElement(
-                    $dcTitle,
-                    "PDF Document from: $itemTitle"
-                    
-                );
-        
-                $file->addTextForElement(
-                    $dcDescription,
-                    $itemDescription
-                    
-                );
+                //save changes to file
                 $file->save();
                 
-                //dump the object from memory, save changes to the file
+                //dump the object from memory,
                 release_object($Item);
                 
                 release_object($file);
 
             }
-            $pageNumber++;
-        }
-       fclose($logfile);
         
+       
+        }
+        
+        
+        
+       
     }
 }
+?>
