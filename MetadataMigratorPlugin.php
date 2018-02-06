@@ -61,9 +61,9 @@ class MetadataMigratorPlugin extends Omeka_Plugin_AbstractPlugin
         
         $mimeTypes = $this->getPdfMimeTypes();
 
-        $dcElementSet = $dataBase->getTable('ElementSet')->findByName('Dublin Core');
 
-        $dcElements = $dcElementSet->getElements();
+
+        
 
         $select = $dataBase->select()
         ->from($dataBase->File)
@@ -71,13 +71,23 @@ class MetadataMigratorPlugin extends Omeka_Plugin_AbstractPlugin
         $pageNumber = 1;
         while ($files = $fileTable->fetchObjects($select->limitPage($pageNumber, 50))) {
             foreach ($files as $file) {
-                foreach ($dcElements as $dcElement) {
+                $dcTitle = $file->getElement('Dublin Core', 'Title');
 
-                    $file->deleteElementTextsByElementId(array($dcElement->id));
-                
-                }
+                $dcDescription = $file->getElement('Dublin Core', 'Description');
+        
+                $dcSubject = $file->getElement('Dublin Core', 'Subject');
+
+                $file->deleteElementTextsByElementId(array($dcTitle->id));
+
+                $file->deleteElementTextsByElementId(array($dcDescription->id));
+
+                $file->deleteElementTextsByElementId(array($dcSubject->id));
+
+
             }
             $pageNumber++;
+            $file->save();
+            release_object($file);
         }
 
         
@@ -128,32 +138,40 @@ class MetadataMigratorPlugin extends Omeka_Plugin_AbstractPlugin
             return;
         }
 
-        //get the item table
-        
-        $dataBase = get_db();
-        $itemTable = $dataBase->_db->getTable('Item');
-
-        //now get the item record
-
-        $select = $dataBase->select()
-        ->from($dataBase->Item)
-        ->where('id = ?', $file->item_id);
-        
-        $Item = $itemTable->fetchObject($select);
-
-        $dcElementSet = $dataBase->getTable('ElementSet')->findByName('Dublin Core');
-
-        $dcElements = $dcElementSet->getElements();
-
         $metadataOptions = array('no_escape' => true, 'no_filter' => true);
 
-        foreach ($dcElements as $dcElement) {
+        //get the item table
+        $Item = $file->getItem();
 
-            $itemMetadataText = metadata($Item, array('Dublin Core', $dcElement->name), $metadataOptions);
-            
- 
+        $dcTitle = $file->getElement('Dublin Core', 'Title');
 
-        }
+        $dcDescription = $file->getElement('Dublin Core', 'Description');
+
+        $dcSubject = $file->getElement('Dublin Core', 'Subject');
+
+        $itemTitle = metadata($Item, array('Dublin Core', 'Title'), $metadataOptions);
+
+        $itemDescription = metadata($Item, array('Dublin Core', 'Description'), $metadataOptions);
+
+        $itemSubject = metadata($Item, array('Dublin Core', 'Subject'), $metadataOptions);
+
+        $file->addTextForElement(
+            $dcTitle,
+            "PDF File from: $itemTitle"
+        
+        );
+
+        $file->addTextForElement(
+            $dcDescription,
+            $itemDescription
+        
+        );
+
+        $file->addTextForElement(
+            $dcSubject,
+            $itemSubject
+        
+        );
 
     
         release_object($Item);

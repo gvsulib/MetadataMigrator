@@ -17,7 +17,7 @@ class MetadataMigrateProcess extends Omeka_Job_AbstractJob
     public function perform()
 
     {
-               
+        
         $MetaDataMigratorPlugin = new MetaDataMigratorPlugin;
         $fileTable = $this->_db->getTable('File');
         $itemTable = $this->_db->getTable('Item');
@@ -31,77 +31,64 @@ class MetadataMigrateProcess extends Omeka_Job_AbstractJob
         ->from($this->_db->File)
         ->where('mime_type IN (?)', $MetaDataMigratorPlugin->getPdfMimeTypes());
 
-        
-
-        //get the DC metadata set
-        $dcElementSet = $this->_db->getTable('ElementSet')->findByName('Dublin Core');
-        
-        $dcElements = $dcElementSet->getElements();
 
         $metadataOptions = array('no_escape' => true, 'no_filter' => true);
         
-
+        
         //now cycle through them, wiping dc metadata wherever it is
         $pageNumber = 1;
         while ($files = $fileTable->fetchObjects($selectFiles->limitPage($pageNumber, 50))) {
-            
+            $pageNumber++;
             foreach ($files as $file) {
+                
+
+                $dcTitle = $file->getElement('Dublin Core', 'Title');
+
+                $dcDescription = $file->getElement('Dublin Core', 'Description');
+
+                $dcSubject = $file->getElement('Dublin Core', 'Subject');
                
                 
-                //first delete all existing DC metadata
-                foreach ($dcElements as $dcElement) {
-                    
-                    $file->deleteElementTextsByElementId(array($dcElement->id));
+                $file->deleteElementTextsByElementId(array($dcTitle->id));
+
+                $file->deleteElementTextsByElementId(array($dcDescription->id));
+
+                $file->deleteElementTextsByElementId(array($dcSubject->id));
                    
-                }
-                $file->save();
-                release_object($file);
-               
-            }
-            $pageNumber++;
-        }
-        //now cycle through again, this time attaching metadata
-        
-        $pageNumber = 1;
-        while ($files = $fileTable->fetchObjects($selectFiles->limitPage($pageNumber, 50))) {
-            $pageNumber++;
-            
-            
-            foreach ($files as $file) {
-            
-                //get the parent item 
-                $selectItem = $this->_db->select()
-                    ->from($this->_db->Item)
-                    ->where('id = ?', $file->item_id);
-
-                $Item = $itemTable->fetchObject($selectItem);
-               
-               
-                //loop through Item DC metadata, grab the text of the elment from the item,
-                //attach it to the file
-
                 
-                foreach ($dcElements as $dcElement) {
-                    $itemMetadataText = metadata($Item, array('Dublin Core', $dcElement->name), $metadataOptions);
-                    
+                //get the parent item 
+                
 
-                    if ($dcElement->name == "Title") {
+                $Item = $file->getItem();
+               
+               
+                //loop through Item DC metadata, grab the text of the element from the item,
+                //attach it to the file
+               
+                $itemTitle = metadata($Item, array('Dublin Core', 'Title'), $metadataOptions);
 
-            
-                        $file->addTextForElement(
-                            $dcElement,
-                            "PDF File from: $itemMetadataText"
-                        
-                        );
-                    } else {
-                        $file->addTextForElement(
-                            $dcElement,
-                            $itemMetadataText
-                        
-                        );
-                    }
+                $itemDescription = metadata($Item, array('Dublin Core', 'Description'), $metadataOptions);
 
-                }
+                $itemSubject = metadata($Item, array('Dublin Core', 'Subject'), $metadataOptions);
+                
+                $file->addTextForElement(
+                    $dcTitle,
+                    "PDF File from: $itemTitle"
+                
+                );
+
+                $file->addTextForElement(
+                    $dcDescription,
+                    $itemDescription
+                
+                );
+
+                $file->addTextForElement(
+                    $dcSubject,
+                    $itemSubject
+                
+                );
+
                 //save changes to file
                 $file->save();
                 
@@ -114,8 +101,6 @@ class MetadataMigrateProcess extends Omeka_Job_AbstractJob
         
        
         }
-        
-        
         
        
     }
