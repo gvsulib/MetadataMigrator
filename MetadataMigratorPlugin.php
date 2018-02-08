@@ -75,13 +75,23 @@ class MetadataMigratorPlugin extends Omeka_Plugin_AbstractPlugin
 
                 $dcDescription = $file->getElement('Dublin Core', 'Description');
         
-                $dcSubject = $file->getElement('Dublin Core', 'Subject');
+            
+
+                $dcIdentifier = $file->getElement('Dublin Core', 'Identifier');
+                
+                $dcSource = $file->getElement('Dublin Core', 'Source');
+
+              
 
                 $file->deleteElementTextsByElementId(array($dcTitle->id));
 
                 $file->deleteElementTextsByElementId(array($dcDescription->id));
 
-                $file->deleteElementTextsByElementId(array($dcSubject->id));
+
+                $file->deleteElementTextsByElementId(array($dcIdentifier->id));
+
+                $file->deleteElementTextsByElementId(array($dcSource->id));
+
 
 
             }
@@ -140,20 +150,26 @@ class MetadataMigratorPlugin extends Omeka_Plugin_AbstractPlugin
 
         $metadataOptions = array('no_escape' => true, 'no_filter' => true);
 
-        //get the item table
-        $Item = $file->getItem();
-
         $dcTitle = $file->getElement('Dublin Core', 'Title');
 
         $dcDescription = $file->getElement('Dublin Core', 'Description');
 
-        $dcSubject = $file->getElement('Dublin Core', 'Subject');
+        $dcIdentifier = $file->getElement('Dublin Core', 'Identifier');
+        
+        $dcSource = $file->getElement('Dublin Core', 'Source');
+
+
+
+        //get the item table
+        $Item = $file->getItem();
 
         $itemTitle = metadata($Item, array('Dublin Core', 'Title'), $metadataOptions);
 
         $itemDescription = metadata($Item, array('Dublin Core', 'Description'), $metadataOptions);
 
-        $itemSubject = metadata($Item, array('Dublin Core', 'Subject'), $metadataOptions);
+        $itemIdentifier = metadata($Item, array('Dublin Core', 'Identifier'), $metadataOptions);
+
+        $itemSource = metadata($Item, array('Dublin Core', 'Source'), $metadataOptions);
 
         $file->addTextForElement(
             $dcTitle,
@@ -168,10 +184,18 @@ class MetadataMigratorPlugin extends Omeka_Plugin_AbstractPlugin
         );
 
         $file->addTextForElement(
-            $dcSubject,
-            $itemSubject
+            $dcIdentifier,
+            $itemIdentifier
         
         );
+
+        $file->addTextForElement(
+            $dcSource,
+            $itemSource
+        
+        );
+
+  
 
     
         release_object($Item);

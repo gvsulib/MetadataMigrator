@@ -17,11 +17,9 @@ class MetadataMigrateProcess extends Omeka_Job_AbstractJob
     public function perform()
 
     {
-        
+        $logfile = fopen("/home/bitnami/htdocs/plugins/MetadataMigrator/models/logfile.log", "w");
         $MetaDataMigratorPlugin = new MetaDataMigratorPlugin;
         $fileTable = $this->_db->getTable('File');
-        $itemTable = $this->_db->getTable('Item');
-        
 
         
         //first make sure we delete any existing file-level metadata that might be in existence
@@ -40,21 +38,27 @@ class MetadataMigrateProcess extends Omeka_Job_AbstractJob
         while ($files = $fileTable->fetchObjects($selectFiles->limitPage($pageNumber, 50))) {
             $pageNumber++;
             foreach ($files as $file) {
+                fwrite($logfile, $file->item_id);
                 
 
                 $dcTitle = $file->getElement('Dublin Core', 'Title');
 
                 $dcDescription = $file->getElement('Dublin Core', 'Description');
 
-                $dcSubject = $file->getElement('Dublin Core', 'Subject');
-               
+                $dcSource = $file->getElement('Dublin Core', 'Source');
+
+                $dcIdentifier = $file->getElement('Dublin Core', 'Identifier');
+
                 
                 $file->deleteElementTextsByElementId(array($dcTitle->id));
 
                 $file->deleteElementTextsByElementId(array($dcDescription->id));
+                
+                $file->deleteElementTextsByElementId(array($dcSource->id));
 
-                $file->deleteElementTextsByElementId(array($dcSubject->id));
+                $file->deleteElementTextsByElementId(array($dcIdentifier->id));
                    
+
                 
                 //get the parent item 
                 
@@ -69,14 +73,23 @@ class MetadataMigrateProcess extends Omeka_Job_AbstractJob
 
                 $itemDescription = metadata($Item, array('Dublin Core', 'Description'), $metadataOptions);
 
-                $itemSubject = metadata($Item, array('Dublin Core', 'Subject'), $metadataOptions);
+                $itemSource = metadata($Item, array('Dublin Core', 'Source'), $metadataOptions);
+
+                $itemIdentifier = metadata($Item, array('Dublin Core', 'Identifier'), $metadataOptions);
+
+                
+                $file->addTextForElement(
+                    $dcSource,
+                    $itemSource
+                
+                );
                 
                 $file->addTextForElement(
                     $dcTitle,
                     "PDF File from: $itemTitle"
                 
                 );
-
+        
                 $file->addTextForElement(
                     $dcDescription,
                     $itemDescription
@@ -84,10 +97,14 @@ class MetadataMigrateProcess extends Omeka_Job_AbstractJob
                 );
 
                 $file->addTextForElement(
-                    $dcSubject,
-                    $itemSubject
+                    $dcIdentifier,
+                    $itemIdentifier
                 
                 );
+        
+            
+        
+                
 
                 //save changes to file
                 $file->save();
@@ -101,7 +118,7 @@ class MetadataMigrateProcess extends Omeka_Job_AbstractJob
         
        
         }
-        
+        fclose($logfile);
        
     }
 }
